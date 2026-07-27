@@ -155,6 +155,51 @@
   textarea{ min-height:150px; line-height:1.5; }
   .hint{ font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
 
+  .fav-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+  }
+  .fav-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:#FCFBF8;
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:5px 6px 5px 12px;
+    font-size:12px;
+    cursor:pointer;
+    color:var(--ink-2);
+    transition:.12s;
+  }
+  .fav-chip:hover{ border-color:var(--amber); background:#FFF8EC; }
+  .fav-chip .x{
+    width:16px;height:16px;
+    border-radius:50%;
+    background:var(--paper);
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    flex-shrink:0;
+  }
+  .fav-chip .x:hover{ background:var(--danger); color:#fff; }
+  .fav-empty{ font-size:11.5px; color:var(--muted); }
+  .fav-form{
+    margin-top:10px;
+    background:var(--paper);
+    border:1px dashed var(--line);
+    border-radius:8px;
+    padding:10px;
+  }
+  .fav-form input[type=text]{ margin-bottom:8px; }
+  .fav-form-row{ display:flex; gap:8px; }
+  .fav-form-row input{ flex:1; }
+  #favPinBtn.active{ background:var(--amber); color:#fff; border-color:var(--amber); }
+
   .driver-count-row{
     display:flex;
     align-items:center;
@@ -322,6 +367,22 @@
     line-height:1;
   }
   .stop-row .rm:hover{ color:var(--danger); }
+  .ord-group{
+    display:flex;
+    flex-direction:column;
+    flex-shrink:0;
+  }
+  .ord-btn{
+    border:none;
+    background:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:9px;
+    line-height:1;
+    padding:1px 3px;
+  }
+  .ord-btn:hover:not(:disabled){ color:var(--ink-2); }
+  .ord-btn:disabled{ opacity:.2; cursor:default; }
   .empty-note{ font-size:12px; color:var(--muted); padding:8px 2px; }
 
   .open-route-btn{
@@ -456,7 +517,25 @@
       <h2>配送先リスト</h2>
       <label class="field-label" for="stopsInput">店舗名または住所を1行ずつ（最大50件）</label>
       <textarea id="stopsInput" placeholder="セブンイレブン川崎駅前店&#10;ファミリーマート武蔵小杉店&#10;〇〇株式会社 横浜支店&#10;..."></textarea>
-      <div class="hint">正式な店舗名に近いほど検索精度が上がります。見つからない場合は住所で入力してください。<br>※ Googleのルート計算は1ドライバーあたり最大25件までです。</div>
+      <div class="hint">正式な店舗名に近いほど検索精度が上がります。見つからない場合は住所で入力してください。<br>※ Googleのルート計算は1ドライバーあたり最大25件までです。<br>※「名前 @緯度,経度」の形式で入力すると、検索せず直接その座標にピンを立てられます（例：倉庫裏口 @35.5311,139.6829）。よく使う配送先から登録・呼び出すと自動でこの形式になります。</div>
+
+      <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
+        <label class="field-label">☆ よく使う配送先（クリックでリストに追加）</label>
+        <div class="fav-chips" id="favChips"></div>
+
+        <div class="fav-form">
+          <input type="text" id="favNewInput" placeholder="納品先の名前">
+          <div class="fav-form-row">
+            <input type="text" id="favLatInput" placeholder="緯度（任意）">
+            <input type="text" id="favLngInput" placeholder="経度（任意）">
+          </div>
+          <button class="btn-secondary" id="favPinBtn">📍 地図をクリックして緯度経度を取得</button>
+          <button class="btn-primary" id="favAddBtn" style="margin-top:8px;">＋ よく使う配送先に登録</button>
+          <div class="hint">緯度・経度を入力（または地図で指定）すると、店舗名で検索できない場所でも正確な位置に直接ピンを立てられます。空欄のままなら、従来どおり名前で検索されます。</div>
+        </div>
+
+        <div class="hint" style="margin-top:10px;">入力中のリストの各行を一括登録することもできます：<button class="btn-secondary" id="favAddFromListBtn" style="width:auto; margin-top:4px; padding:5px 10px;">現在のリストを一括登録</button></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -538,7 +617,7 @@
   //   ※ Google Cloud Console でこのキーに「HTTPリファラー制限」をかけ、
   //     デプロイ先のドメイン（例: https://your-org.github.io/*）でのみ
   //     使えるように必ず制限してください。
-  var COMPANY_API_KEY = "AIzaSyBgNPXeWM3682Ff2js9Oy06ncCKKPx6klI";
+  var COMPANY_API_KEY = "";
 
   var DRIVER_COLORS = ["#E63946","#457B9D","#2A9D8F","#F4A261","#8338EC","#FF006E","#3A86FF","#06D6A0","#FB8500","#6A4C93"];
   var UNASSIGNED_COLOR = "#9AA3AF";
@@ -563,7 +642,10 @@
     directionsRenderers: [],
     placesService: null,
     geocoder: null,
-    autocomplete: null
+    autocomplete: null,
+    pinDropMode: false,
+    pinDropMarker: null,
+    lastRouteUrls: {}
   };
 
   var els = {
@@ -592,7 +674,14 @@
     shareBox: document.getElementById('shareBox'),
     shareUrlInput: document.getElementById('shareUrlInput'),
     copyShareBtn: document.getElementById('copyShareBtn'),
-    shareLenHint: document.getElementById('shareLenHint')
+    shareLenHint: document.getElementById('shareLenHint'),
+    favChips: document.getElementById('favChips'),
+    favNewInput: document.getElementById('favNewInput'),
+    favLatInput: document.getElementById('favLatInput'),
+    favLngInput: document.getElementById('favLngInput'),
+    favPinBtn: document.getElementById('favPinBtn'),
+    favAddBtn: document.getElementById('favAddBtn'),
+    favAddFromListBtn: document.getElementById('favAddFromListBtn')
   };
 
   function showMsg(text, type){
@@ -656,6 +745,26 @@
     state.placesService = new google.maps.places.PlacesService(state.map);
     state.autocomplete = new google.maps.places.Autocomplete(els.originInput, {fields:['geometry','name','formatted_address']});
 
+    state.map.addListener('click', function(e){
+      if(!state.pinDropMode) return;
+      var lat = e.latLng.lat();
+      var lng = e.latLng.lng();
+      els.favLatInput.value = lat.toFixed(6);
+      els.favLngInput.value = lng.toFixed(6);
+      if(state.pinDropMarker){ state.pinDropMarker.setMap(null); }
+      state.pinDropMarker = new google.maps.Marker({
+        position: e.latLng,
+        map: state.map,
+        icon: { path: google.maps.SymbolPath.CIRCLE, fillColor:'#12203A', fillOpacity:1, strokeColor:'#ffffff', strokeWeight:2, scale:9 },
+        label: { text:'📍', fontSize:'12px' },
+        zIndex: 998
+      });
+      state.pinDropMode = false;
+      updatePinDropUI();
+      showMsg('地図上の位置を取得しました。名前を入力して「よく使う配送先に登録」を押してください。', 'ok');
+      els.favNewInput.focus();
+    });
+
     var shareData = getShareDataFromHash();
     if(shareData){
       restoreFromShareData(shareData);
@@ -693,6 +802,146 @@
     clampDriverCount();
   });
   clampDriverCount();
+
+  // ===== Favorite stops (persisted per-browser) =====
+  var FAV_KEY = 'drb_favorite_stops';
+  var COORD_LINE_RE = /^(.*?)\s*@\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+  function parseStopLine(line){
+    var m = line.match(COORD_LINE_RE);
+    if(m){
+      return { name: (m[1].trim() || line.trim()), lat: parseFloat(m[2]), lng: parseFloat(m[3]) };
+    }
+    return { name: line.trim(), lat: null, lng: null };
+  }
+
+  function stopLineFor(fav){
+    if(fav.lat!==null && fav.lat!==undefined && fav.lng!==null && fav.lng!==undefined){
+      return fav.name + ' @' + fav.lat + ',' + fav.lng;
+    }
+    return fav.name;
+  }
+
+  function loadFavorites(){
+    try{
+      var raw = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      return raw.map(function(item){
+        if(typeof item === 'string'){ return { name: item, lat: null, lng: null }; }
+        return { name: item.name, lat: (item.lat===undefined ? null : item.lat), lng: (item.lng===undefined ? null : item.lng) };
+      });
+    }catch(e){ return []; }
+  }
+  function saveFavorites(list){ localStorage.setItem(FAV_KEY, JSON.stringify(list)); }
+
+  function renderFavChips(){
+    var favs = loadFavorites();
+    els.favChips.innerHTML = '';
+    if(favs.length === 0){
+      var e = document.createElement('div');
+      e.className = 'fav-empty';
+      e.textContent = 'まだ登録がありません。よく行く納品先を登録しておくと、次回からワンクリックで配送先リストに追加できます。';
+      els.favChips.appendChild(e);
+      return;
+    }
+    favs.forEach(function(fav){
+      var chip = document.createElement('div');
+      chip.className = 'fav-chip';
+      var hasCoord = fav.lat!==null && fav.lat!==undefined;
+      var label = document.createElement('span');
+      label.textContent = (hasCoord ? '📍 ' : '') + fav.name;
+      label.title = hasCoord ? ('緯度経度を直接指定：' + fav.lat + ', ' + fav.lng) : '店舗名で検索';
+      label.addEventListener('click', function(){ insertStopLine(fav); });
+      var x = document.createElement('span');
+      x.className = 'x';
+      x.textContent = '×';
+      x.title = '登録解除';
+      x.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        saveFavorites(loadFavorites().filter(function(f){ return f.name !== fav.name; }));
+        renderFavChips();
+      });
+      chip.appendChild(label);
+      chip.appendChild(x);
+      els.favChips.appendChild(chip);
+    });
+  }
+
+  function insertStopLine(fav){
+    var line = stopLineFor(fav);
+    var current = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(current.indexOf(line) === -1){ current.push(line); }
+    els.stopsInput.value = current.join('\n');
+  }
+
+  function addFavorite(name, latStr, lngStr){
+    name = (name || '').trim();
+    if(!name){ showMsg('納品先の名前を入力してください。', 'error'); return; }
+    var latRaw = (latStr || '').trim();
+    var lngRaw = (lngStr || '').trim();
+    var lat = null, lng = null;
+    if(latRaw || lngRaw){
+      if(!latRaw || !lngRaw){ showMsg('緯度・経度は両方入力するか、両方空欄にしてください。', 'error'); return; }
+      lat = parseFloat(latRaw);
+      lng = parseFloat(lngRaw);
+      if(isNaN(lat) || isNaN(lng)){ showMsg('緯度・経度の形式が正しくありません（例：35.5311）。', 'error'); return; }
+    }
+    var favs = loadFavorites().filter(function(f){ return f.name !== name; }); // 同名は上書き
+    favs.push({ name: name, lat: lat, lng: lng });
+    saveFavorites(favs);
+    renderFavChips();
+    showMsg('「' + name + '」を、よく使う配送先に登録しました。', 'ok');
+  }
+
+  function updatePinDropUI(){
+    if(state.pinDropMode){
+      els.favPinBtn.textContent = '📍 地図をクリックしてください（もう一度押しでキャンセル）';
+      els.favPinBtn.classList.add('active');
+      if(state.map) state.map.setOptions({ draggableCursor: 'crosshair' });
+    } else {
+      els.favPinBtn.textContent = '📍 地図をクリックして緯度経度を取得';
+      els.favPinBtn.classList.remove('active');
+      if(state.map) state.map.setOptions({ draggableCursor: null });
+    }
+  }
+
+  els.favPinBtn.addEventListener('click', function(){
+    if(!state.map){ showMsg('先にAPIキーを設定し、地図を表示してください。', 'error'); return; }
+    state.pinDropMode = !state.pinDropMode;
+    updatePinDropUI();
+    if(state.pinDropMode){ showMsg('地図をクリックすると、その場所の緯度経度を取得します。', 'warn'); }
+  });
+
+  els.favAddBtn.addEventListener('click', function(){
+    addFavorite(els.favNewInput.value, els.favLatInput.value, els.favLngInput.value);
+    els.favNewInput.value = '';
+    els.favLatInput.value = '';
+    els.favLngInput.value = '';
+    if(state.pinDropMarker){ state.pinDropMarker.setMap(null); state.pinDropMarker = null; }
+  });
+  els.favNewInput.addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229){
+      addFavorite(els.favNewInput.value, els.favLatInput.value, els.favLngInput.value);
+      els.favNewInput.value = ''; els.favLatInput.value=''; els.favLngInput.value='';
+    }
+  });
+  els.favAddFromListBtn.addEventListener('click', function(){
+    var lines = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(lines.length === 0){ showMsg('配送先リストが空です。先に入力してください。', 'warn'); return; }
+    var favs = loadFavorites();
+    var added = 0;
+    lines.forEach(function(line){
+      var parsed = parseStopLine(line);
+      if(!favs.some(function(f){ return f.name === parsed.name; })){
+        favs.push(parsed);
+        added++;
+      }
+    });
+    saveFavorites(favs);
+    renderFavChips();
+    showMsg(added + '件を「よく使う配送先」に登録しました。', 'ok');
+  });
+
+  renderFavChips();
 
   // ===== Build (geocode + place pins) =====
   els.buildBtn.addEventListener('click', function(){
@@ -800,9 +1049,15 @@
     function next(){
       if(i >= list.length){ return Promise.resolve({found:found, notFound:notFound}); }
       var text = list[i]; i++;
+      var parsed = parseStopLine(text);
+      if(parsed.lat !== null && parsed.lng !== null){
+        // 緯度経度が直接指定されている場合は検索せずそのまま採用
+        found.push({ name: parsed.name, address: '(緯度経度を直接指定: ' + parsed.lat + ', ' + parsed.lng + ')', lat: parsed.lat, lng: parsed.lng, marker: null, driver: null, order: found.length });
+        return next();
+      }
       return geocodeText(text, biasLocation).then(function(r){
         if(r){
-          found.push({ name: r.name, address: r.address, lat: r.location.lat(), lng: r.location.lng(), marker: null, driver: null });
+          found.push({ name: r.name, address: r.address, lat: r.location.lat(), lng: r.location.lng(), marker: null, driver: null, order: found.length });
         } else {
           notFound.push(text);
         }
@@ -897,6 +1152,7 @@
     }
     var color = store.driver === null ? UNASSIGNED_COLOR : DRIVER_COLORS[store.driver % DRIVER_COLORS.length];
     store.marker.setIcon(markerIcon(color));
+    state.lastRouteUrls = {};
     updateTabCounts();
     renderDriverBlocks();
   }
@@ -905,6 +1161,7 @@
     var store = state.stores[idx];
     store.driver = null;
     store.marker.setIcon(markerIcon(UNASSIGNED_COLOR));
+    state.lastRouteUrls = {};
     updateTabCounts();
     renderDriverBlocks();
   }
@@ -931,9 +1188,29 @@
       store.marker.setIcon(markerIcon(DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]));
     });
     updateTabCounts();
+    state.lastRouteUrls = {};
     renderDriverBlocks();
     showMsg('距離（方角）順に自動で割り振りました。ピンをクリックすると手動で調整できます。', 'ok');
   });
+
+  // ===== Manual & automatic reordering =====
+  function applyOrder(orderedStops){
+    orderedStops.forEach(function(item, i){ item.s.order = i; });
+  }
+
+  function moveStop(driverIdx, pos, dir){
+    var list = state.stores
+      .map(function(s, idx){ return {s:s, idx:idx}; })
+      .filter(function(item){ return item.s.driver === driverIdx; })
+      .sort(function(a,b){ return (a.s.order||0) - (b.s.order||0); });
+    var newPos = pos + dir;
+    if(newPos < 0 || newPos >= list.length) return;
+    var tmp = list[pos].s.order;
+    list[pos].s.order = list[newPos].s.order;
+    list[newPos].s.order = tmp;
+    delete state.lastRouteUrls[driverIdx];
+    renderDriverBlocks();
+  }
 
   // ===== Results panel =====
   function renderDriverBlocks(){
@@ -942,6 +1219,7 @@
       (function(i){
         var stops = [];
         state.stores.forEach(function(s, idx){ if(s.driver===i) stops.push({s:s, idx:idx}); });
+        stops.sort(function(a,b){ return (a.s.order||0) - (b.s.order||0); });
 
         var block = document.createElement('div');
         block.className = 'driver-block';
@@ -961,12 +1239,30 @@
           empty.textContent = '未割当（地図でピンをクリックして割り当ててください）';
           body.appendChild(empty);
         } else {
-          stops.forEach(function(item, order){
+          stops.forEach(function(item, pos){
             var row = document.createElement('div');
             row.className = 'stop-row';
+
+            var ordGroup = document.createElement('div');
+            ordGroup.className = 'ord-group';
+            var upBtn = document.createElement('button');
+            upBtn.className = 'ord-btn';
+            upBtn.textContent = '▲';
+            upBtn.title = '順番を上げる';
+            upBtn.disabled = (pos === 0);
+            upBtn.addEventListener('click', function(){ moveStop(i, pos, -1); });
+            var downBtn = document.createElement('button');
+            downBtn.className = 'ord-btn';
+            downBtn.textContent = '▼';
+            downBtn.title = '順番を下げる';
+            downBtn.disabled = (pos === stops.length-1);
+            downBtn.addEventListener('click', function(){ moveStop(i, pos, 1); });
+            ordGroup.appendChild(upBtn);
+            ordGroup.appendChild(downBtn);
+
             var idxBadge = document.createElement('span');
             idxBadge.className = 'idx';
-            idxBadge.textContent = order+1;
+            idxBadge.textContent = pos+1;
             var nm = document.createElement('span');
             nm.className = 'nm';
             nm.textContent = item.s.name;
@@ -975,6 +1271,7 @@
             rm.title = '割当解除';
             rm.textContent = '×';
             rm.addEventListener('click', function(){ unassign(item.idx); });
+            row.appendChild(ordGroup);
             row.appendChild(idxBadge);
             row.appendChild(nm);
             row.appendChild(rm);
@@ -982,6 +1279,12 @@
           });
         }
         block.appendChild(body);
+
+        var optimizeBtn = document.createElement('button');
+        optimizeBtn.className = 'open-route-btn';
+        optimizeBtn.textContent = '🔀 最短ルートに並び替え';
+        optimizeBtn.disabled = stops.length < 2;
+        block.appendChild(optimizeBtn);
 
         var openBtn = document.createElement('button');
         openBtn.className = 'open-route-btn';
@@ -1022,15 +1325,38 @@
         linkBox.appendChild(linkRow);
         block.appendChild(linkBox);
 
+        // restore cached link (survives re-renders triggered by manual reorder etc.)
+        if(state.lastRouteUrls[i]){
+          linkInput.value = state.lastRouteUrls[i];
+          linkBox.style.display = 'block';
+        }
+
+        optimizeBtn.addEventListener('click', function(){
+          optimizeBtn.disabled = true;
+          optimizeBtn.textContent = '計算中...';
+          computeOptimizedRoute(i, stops, function(result){
+            if(result){
+              applyOrder(result.orderedStops);
+              state.lastRouteUrls[i] = result.url;
+              renderDriverBlocks();
+              showMsg('ドライバー' + (i+1) + 'の配送順を最短ルートに並び替えました。', 'ok');
+            } else {
+              optimizeBtn.disabled = false;
+              optimizeBtn.textContent = '🔀 最短ルートに並び替え';
+            }
+          });
+        });
+
         openBtn.addEventListener('click', function(){
           openBtn.disabled = true;
           openBtn.textContent = 'ルート計算中...';
-          openRouteForDriver(i, stops, function(url){
+          computeOptimizedRoute(i, stops, function(result){
             openBtn.disabled = false;
             openBtn.textContent = '🗺  Googleマップのルートリンクを作る';
-            if(url){
-              linkInput.value = url;
-              linkBox.style.display = 'block';
+            if(result){
+              applyOrder(result.orderedStops);
+              state.lastRouteUrls[i] = result.url;
+              renderDriverBlocks();
             }
           });
         });
@@ -1046,12 +1372,21 @@
     state.directionsRenderers = [];
   }
 
-  function openRouteForDriver(driverIdx, stops, callback){
+  function computeOptimizedRoute(driverIdx, stops, callback){
     if(!state.originLatLng || stops.length===0){ if(callback) callback(null); return; }
 
     if(stops.length > MAX_STOPS_PER_DRIVER){
       showMsg('ドライバー' + (driverIdx+1) + 'の割当が' + stops.length + '件あり、Googleのルート計算の上限（1ドライバーあたり' + MAX_STOPS_PER_DRIVER + '件）を超えています。他のドライバーに一部を割り振り直してください。', 'error');
       if(callback) callback(null);
+      return;
+    }
+    if(stops.length === 1){
+      var only = stops[0];
+      var url1 = 'https://www.google.com/maps/dir/?api=1'
+        + '&origin=' + encodeURIComponent(state.originLatLng.lat() + ',' + state.originLatLng.lng())
+        + '&destination=' + encodeURIComponent(only.s.lat + ',' + only.s.lng)
+        + '&travelmode=driving';
+      if(callback) callback({ url: url1, orderedStops: [only] });
       return;
     }
 
@@ -1098,7 +1433,7 @@
         + (wpStr ? '&waypoints=' + encodeURIComponent(wpStr) : '')
         + '&travelmode=driving';
 
-      if(callback) callback(url);
+      if(callback) callback({ url: url, orderedStops: orderedStops });
     });
   }
 
@@ -1119,7 +1454,7 @@
       o: { lat: state.originLatLng.lat(), lng: state.originLatLng.lng() },
       dc: state.driverCount,
       st: state.stores.map(function(s){
-        return { n: s.name, a: s.address, la: s.lat, ln: s.lng, d: (s.driver===null||s.driver===undefined) ? null : s.driver };
+        return { n: s.name, a: s.address, la: s.lat, ln: s.lng, d: (s.driver===null||s.driver===undefined) ? null : s.driver, o: (s.order===undefined?null:s.order) };
       })
     };
   }
@@ -1184,8 +1519,8 @@
     state.originLatLng = new google.maps.LatLng(data.o.lat, data.o.lng);
     placeOriginMarker({ location: state.originLatLng, name: data.ot });
 
-    state.stores = (data.st || []).map(function(s){
-      return { name: s.n, address: s.a, lat: s.la, lng: s.ln, marker: null, driver: (s.d===null||s.d===undefined) ? null : s.d };
+    state.stores = (data.st || []).map(function(s, idx){
+      return { name: s.n, address: s.a, lat: s.la, lng: s.ln, marker: null, driver: (s.d===null||s.d===undefined) ? null : s.d, order: (s.o===null||s.o===undefined) ? idx : s.o };
     });
 
     finalizeBoard();
