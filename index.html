@@ -1194,6 +1194,15 @@
   });
 
   // ===== Manual & automatic reordering =====
+  function haversineKm(lat1, lng1, lat2, lng2){
+    var R = 6371;
+    var dLat = (lat2-lat1) * Math.PI/180;
+    var dLng = (lng2-lng1) * Math.PI/180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
   function applyOrder(orderedStops){
     orderedStops.forEach(function(item, i){ item.s.order = i; });
   }
@@ -1391,8 +1400,18 @@
     }
 
     var origin = state.originLatLng;
-    var destination = {lat: stops[stops.length-1].s.lat, lng: stops[stops.length-1].s.lng};
-    var waypoints = stops.slice(0, -1).map(function(item){
+
+    // 出発地点から最も遠い配送先を「目的地」に選ぶ（＝往路の折り返し地点にしない）
+    var farthestPos = 0, maxDist = -1;
+    stops.forEach(function(item, pos){
+      var d = haversineKm(origin.lat(), origin.lng(), item.s.lat, item.s.lng);
+      if(d > maxDist){ maxDist = d; farthestPos = pos; }
+    });
+    var destinationItem = stops[farthestPos];
+    var others = stops.filter(function(item, pos){ return pos !== farthestPos; });
+
+    var destination = {lat: destinationItem.s.lat, lng: destinationItem.s.lng};
+    var waypoints = others.map(function(item){
       return { location: {lat: item.s.lat, lng: item.s.lng}, stopover: true };
     });
 
@@ -1418,10 +1437,10 @@
       });
       state.directionsRenderers.push(renderer);
 
-      // build ordered stop list from optimized waypoint order
-      var order = result.routes[0].waypoint_order; // indices into waypoints array
-      var orderedStops = order.map(function(i){ return stops[i]; });
-      orderedStops.push(stops[stops.length-1]); // destination last
+      // build ordered stop list from optimized waypoint order (indices refer to "others", not the full stops list)
+      var order = result.routes[0].waypoint_order;
+      var orderedStops = order.map(function(i){ return others[i]; });
+      orderedStops.push(destinationItem); // 一番遠い場所を最後に配置
 
       var originStr = origin.lat() + ',' + origin.lng();
       var destStr = destination.lat + ',' + destination.lng;
