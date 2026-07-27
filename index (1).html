@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配送ルート割当ボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12203A;        /* 濃紺 : ヘッダー/見出し */
+    --ink-2:#1E2E4D;      /* パネル濃色 */
+    --paper:#F3F1EA;      /* マニフェスト紙色の背景 */
+    --paper-2:#FFFFFF;
+    --line:#DAD5C7;       /* 罫線色 */
+    --amber:#FB9E1B;      /* カーゴ・アンバー：シグネチャーカラー */
+    --amber-ink:#7A4A00;
+    --muted:#6B7280;
+    --danger:#D63A3A;
+    --ok:#1F8A5E;
+    --unassigned:#9AA3AF;
+    --radius:10px;
+    --shadow: 0 1px 2px rgba(18,32,58,.06), 0 8px 20px -12px rgba(18,32,58,.25);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    display:flex;
+    flex-direction:column;
+  }
+  .num, .mono{ font-family:'JetBrains Mono', monospace; }
+
+  /* ===== Header ===== */
+  header{
+    background:var(--ink);
+    color:#fff;
+    padding:14px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-shrink:0;
+    box-shadow: var(--shadow);
+    z-index:20;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .brand .tag{
+    font-family:'Big Shoulders Display', sans-serif;
+    font-weight:800;
+    font-size:12px;
+    letter-spacing:.14em;
+    background:var(--amber);
+    color:var(--amber-ink);
+    padding:3px 8px;
+    border-radius:4px;
+    transform: rotate(-2deg);
+  }
+  .brand h1{
+    font-size:18px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:.02em;
+  }
+  .brand small{
+    display:block;
+    font-size:11px;
+    color:#AEB8CC;
+    font-weight:400;
+    margin-top:2px;
+  }
+  header button.ghost{
+    background:transparent;
+    border:1px solid rgba(255,255,255,.25);
+    color:#fff;
+    padding:8px 14px;
+    border-radius:8px;
+    font-size:12.5px;
+    cursor:pointer;
+    font-family:inherit;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    transition:.15s;
+  }
+  header button.ghost:hover{ background:rgba(255,255,255,.12); }
+
+  /* ===== Layout ===== */
+  .layout{
+    flex:1;
+    display:flex;
+    min-height:0;
+  }
+  .sidebar{
+    width:380px;
+    min-width:380px;
+    background:var(--paper-2);
+    border-right:1px solid var(--line);
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+  }
+  .panel{
+    padding:18px 20px;
+    border-bottom:1px dashed var(--line);
+  }
+  .panel:last-child{ border-bottom:none; }
+  .panel h2{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    color:var(--muted);
+    margin:0 0 12px 0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .panel h2::before{
+    content:'';
+    width:6px;height:6px;
+    background:var(--amber);
+    display:inline-block;
+    border-radius:1px;
+    transform:rotate(45deg);
+  }
+  label.field-label{
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--ink-2);
+    display:block;
+    margin-bottom:6px;
+  }
+  input[type=text], input[type=number], textarea{
+    width:100%;
+    border:1px solid var(--line);
+    background:#FCFBF8;
+    border-radius:8px;
+    padding:9px 11px;
+    font-family:inherit;
+    font-size:13.5px;
+    color:var(--ink);
+    resize:vertical;
+  }
+  input[type=text]:focus, input[type=number]:focus, textarea:focus{
+    outline:2px solid var(--amber);
+    outline-offset:0;
+    border-color:var(--amber);
+  }
+  textarea{ min-height:150px; line-height:1.5; }
+  .hint{ font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
+
+  .fav-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+  }
+  .fav-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:#FCFBF8;
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:5px 6px 5px 12px;
+    font-size:12px;
+    cursor:pointer;
+    color:var(--ink-2);
+    transition:.12s;
+  }
+  .fav-chip:hover{ border-color:var(--amber); background:#FFF8EC; }
+  .fav-chip .x{
+    width:16px;height:16px;
+    border-radius:50%;
+    background:var(--paper);
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    flex-shrink:0;
+  }
+  .fav-chip .x:hover{ background:var(--danger); color:#fff; }
+  .fav-empty{ font-size:11.5px; color:var(--muted); }
+  .fav-form{
+    margin-top:10px;
+    background:var(--paper);
+    border:1px dashed var(--line);
+    border-radius:8px;
+    padding:10px;
+  }
+  .fav-form input[type=text]{ margin-bottom:8px; }
+  .fav-form-row{ display:flex; gap:8px; }
+  .fav-form-row input{ flex:1; }
+  #favPinBtn.active{ background:var(--amber); color:#fff; border-color:var(--amber); }
+
+  .driver-count-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .driver-count-row input{ width:70px; text-align:center; font-weight:700; }
+  .stepper{
+    display:flex;
+    border:1px solid var(--line);
+    border-radius:8px;
+    overflow:hidden;
+  }
+  .stepper button{
+    width:32px;height:36px;
+    border:none;
+    background:#FCFBF8;
+    font-size:16px;
+    cursor:pointer;
+    color:var(--ink-2);
+  }
+  .stepper button:hover{ background:var(--paper); }
+
+  .btn-primary{
+    width:100%;
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:12px 14px;
+    border-radius:8px;
+    font-weight:700;
+    font-size:13.5px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    letter-spacing:.02em;
+    transition:.15s;
+  }
+  .btn-primary:hover{ background:#0A1626; }
+  .btn-primary:disabled{ background:#B9BFC9; cursor:not-allowed; }
+  .btn-secondary{
+    width:100%;
+    background:#fff;
+    color:var(--ink-2);
+    border:1px solid var(--line);
+    padding:9px 12px;
+    border-radius:8px;
+    font-weight:600;
+    font-size:12.5px;
+    cursor:pointer;
+    margin-top:8px;
+  }
+  .btn-secondary:hover{ background:var(--paper); }
+
+  .msg{
+    margin-top:10px;
+    font-size:12.5px;
+    border-radius:8px;
+    padding:9px 11px;
+    display:none;
+    line-height:1.5;
+  }
+  .msg.error{ background:#FDEBEB; color:var(--danger); display:block; }
+  .msg.warn{ background:#FFF4E0; color:var(--amber-ink); display:block; }
+  .msg.ok{ background:#E8F6EF; color:var(--ok); display:block; }
+
+  /* ===== Driver tag tabs ===== */
+  .driver-tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .driver-tag{
+    font-family:'Big Shoulders Display', sans-serif;
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:.03em;
+    padding:7px 12px 6px;
+    border-radius:6px;
+    border:2px solid transparent;
+    cursor:pointer;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    transform: rotate(-1deg);
+    box-shadow: var(--shadow);
+    transition:.12s;
+  }
+  .driver-tag .count{
+    font-family:'JetBrains Mono', monospace;
+    font-weight:700;
+    background:rgba(255,255,255,.28);
+    border-radius:4px;
+    padding:0 5px;
+    font-size:11px;
+  }
+  .driver-tag.active{ border-color:var(--ink); transform: rotate(0deg) scale(1.04); }
+  .driver-tag:hover{ transform: rotate(0deg); }
+
+  .assign-hint{
+    font-size:12px;
+    color:var(--muted);
+    background:var(--paper);
+    border-radius:8px;
+    padding:9px 10px;
+    margin-top:12px;
+    line-height:1.6;
+    border:1px dashed var(--line);
+  }
+  .assign-hint b{ color:var(--ink-2); }
+
+  /* ===== Driver stop lists ===== */
+  .driver-block{
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-bottom:12px;
+    overflow:hidden;
+  }
+  .driver-block-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:9px 12px;
+    color:#fff;
+  }
+  .driver-block-head .name{
+    font-family:'Big Shoulders Display', sans-serif;
+    font-weight:700;
+    font-size:14px;
+  }
+  .driver-block-body{
+    padding:8px 12px;
+    background:#FCFBF8;
+  }
+  .stop-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:5px 0;
+    font-size:12.5px;
+    border-bottom:1px solid var(--line);
+  }
+  .stop-row:last-child{ border-bottom:none; }
+  .stop-row .idx{
+    font-family:'JetBrains Mono', monospace;
+    font-size:10.5px;
+    color:#fff;
+    background:var(--ink-2);
+    width:18px;height:18px;
+    border-radius:4px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+  }
+  .stop-row .nm{ flex:1; }
+  .stop-row .rm{
+    border:none;
+    background:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:14px;
+    line-height:1;
+  }
+  .stop-row .rm:hover{ color:var(--danger); }
+  .ord-group{
+    display:flex;
+    flex-direction:column;
+    flex-shrink:0;
+  }
+  .ord-btn{
+    border:none;
+    background:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:9px;
+    line-height:1;
+    padding:1px 3px;
+  }
+  .ord-btn:hover:not(:disabled){ color:var(--ink-2); }
+  .ord-btn:disabled{ opacity:.2; cursor:default; }
+  .empty-note{ font-size:12px; color:var(--muted); padding:8px 2px; }
+
+  .open-route-btn{
+    width:100%;
+    border:none;
+    background:transparent;
+    color:var(--ink-2);
+    font-weight:700;
+    font-size:12px;
+    padding:8px 12px;
+    cursor:pointer;
+    border-top:1px dashed var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .open-route-btn:hover{ background:var(--paper); }
+  .open-route-btn:disabled{ color:#C7CBD2; cursor:not-allowed; }
+
+  /* ===== Main / Map ===== */
+  main{
+    flex:1;
+    position:relative;
+    background:#E8E5DC;
+  }
+  #map{ width:100%; height:100%; }
+
+  .map-empty{
+    position:absolute; inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:10px;
+    color:var(--muted);
+    text-align:center;
+    padding:20px;
+  }
+  .map-empty .icon{ font-size:34px; opacity:.5; }
+  .map-empty h3{ margin:0; color:var(--ink-2); font-size:15px; }
+  .map-empty p{ margin:0; font-size:12.5px; max-width:320px; line-height:1.6; }
+
+  .legend-strip{
+    position:absolute;
+    left:16px; bottom:16px;
+    background:rgba(255,255,255,.95);
+    border-radius:10px;
+    box-shadow:var(--shadow);
+    padding:10px 12px;
+    font-size:11.5px;
+    max-width:260px;
+    display:none;
+  }
+  .legend-strip.show{ display:block; }
+  .legend-strip .row{ display:flex; align-items:center; gap:7px; margin-top:4px; }
+  .legend-strip .sw{ width:10px;height:10px;border-radius:50%; flex-shrink:0; }
+
+  /* ===== API key modal ===== */
+  .overlay{
+    position:fixed; inset:0;
+    background:rgba(18,32,58,.55);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+  }
+  .overlay.show{ display:flex; }
+  .modal{
+    background:#fff;
+    width:440px;
+    max-width:92vw;
+    border-radius:14px;
+    padding:26px 26px 22px;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);
+  }
+  .modal h2{ font-size:16px; margin:0 0 6px; color:var(--ink); }
+  .modal p{ font-size:12.5px; color:var(--muted); line-height:1.6; margin:0 0 16px; }
+  .modal a{ color:var(--amber-ink); }
+  .modal input[type=text]{ margin-bottom:10px; }
+  .modal-actions{ display:flex; gap:8px; margin-top:6px; }
+  .modal-actions .btn-primary{ flex:1; }
+  .modal .cancel{
+    background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;
+    padding:12px 10px;
+  }
+  .loading-dots::after{
+    content:'';
+    display:inline-block;
+    width:12px;
+    text-align:left;
+    animation: dots 1.2s steps(4,end) infinite;
+  }
+  @keyframes dots{ 0%{content:'';} 25%{content:'.';} 50%{content:'..';} 75%{content:'...';} }
+
+  @media (max-width: 860px){
+    .layout{ flex-direction:column; }
+    .sidebar{ width:100%; min-width:0; max-height:52vh; }
+    main{ min-height:42vh; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">ROUTE&nbsp;DESK</span>
+    <div>
+      <h1>配送ルート割当ボード</h1>
+      <small>出発地点と配送先を入力 → 地図上でドライバーに手動割当</small>
+    </div>
+  </div>
+  <button class="ghost" id="apiKeyBtn">⚙ APIキー設定</button>
+</header>
+
+<div class="layout">
+
+  <aside class="sidebar">
+
+    <div class="panel" id="shareBanner" style="display:none; background:#FFF4E0;">
+      <div style="font-size:12.5px; color:var(--amber-ink); font-weight:700;">🔗 共有リンクから開いています</div>
+      <div style="font-size:11.5px; color:var(--muted); margin-top:4px; line-height:1.6;">配車担当者が作成した割当です。内容を確認し、必要であれば調整して再度共有リンクを作り直せます。</div>
+    </div>
+
+    <div class="panel">
+      <h2>出発地点</h2>
+      <label class="field-label" for="originInput">営業所・出発場所</label>
+      <input type="text" id="originInput" placeholder="例）〇〇運送 川崎営業所 / 住所">
+    </div>
+
+    <div class="panel">
+      <h2>配送先リスト</h2>
+      <label class="field-label" for="stopsInput">店舗名または住所を1行ずつ（最大50件）</label>
+      <textarea id="stopsInput" placeholder="セブンイレブン川崎駅前店&#10;ファミリーマート武蔵小杉店&#10;〇〇株式会社 横浜支店&#10;..."></textarea>
+      <div class="hint">正式な店舗名に近いほど検索精度が上がります。見つからない場合は住所で入力してください。<br>※ Googleのルート計算は1ドライバーあたり最大25件までです。<br>※「名前 @緯度,経度」の形式で入力すると、検索せず直接その座標にピンを立てられます（例：倉庫裏口 @35.5311,139.6829）。よく使う配送先から登録・呼び出すと自動でこの形式になります。</div>
+
+      <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
+        <label class="field-label">☆ よく使う配送先（クリックでリストに追加）</label>
+        <div class="fav-chips" id="favChips"></div>
+
+        <div class="fav-form">
+          <input type="text" id="favNewInput" placeholder="納品先の名前">
+          <div class="fav-form-row">
+            <input type="text" id="favLatInput" placeholder="緯度（任意）">
+            <input type="text" id="favLngInput" placeholder="経度（任意）">
+          </div>
+          <button class="btn-secondary" id="favPinBtn">📍 地図をクリックして緯度経度を取得</button>
+          <button class="btn-primary" id="favAddBtn" style="margin-top:8px;">＋ よく使う配送先に登録</button>
+          <div class="hint">緯度・経度を入力（または地図で指定）すると、店舗名で検索できない場所でも正確な位置に直接ピンを立てられます。空欄のままなら、従来どおり名前で検索されます。</div>
+        </div>
+
+        <div class="hint" style="margin-top:10px;">入力中のリストの各行を一括登録することもできます：<button class="btn-secondary" id="favAddFromListBtn" style="width:auto; margin-top:4px; padding:5px 10px;">現在のリストを一括登録</button></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>ドライバー数</h2>
+      <div class="driver-count-row">
+        <div class="stepper">
+          <button id="dMinus" type="button">−</button>
+        </div>
+        <input type="number" id="driverCount" value="3" min="1" max="10">
+        <div class="stepper">
+          <button id="dPlus" type="button">＋</button>
+        </div>
+        <div class="hint" style="margin:0;">1〜10人</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <button class="btn-primary" id="buildBtn">📍 地図にピン表示する</button>
+      <button class="btn-secondary" id="autoSplitBtn" style="display:none;">✨ 距離順で自動割り振り（あとで手動調整OK）</button>
+      <div class="msg" id="statusMsg"></div>
+    </div>
+
+    <div class="panel" id="assignPanel" style="display:none;">
+      <h2>ドライバーに割り当てる</h2>
+      <div class="driver-tabs" id="driverTabs"></div>
+      <div class="assign-hint">下のタブでドライバーを選び、地図上のピンをクリックすると、そのドライバーに割り当てられます（もう一度クリックで解除）。現在選択中：<b id="activeDriverLabel">-</b></div>
+    </div>
+
+    <div class="panel" id="resultsPanel" style="display:none;">
+      <h2>割当結果 / ルートを開く</h2>
+      <div id="driverBlocks"></div>
+      <button class="btn-secondary" id="shareLinkBtn">🔗 共有リンクを作成（他のドライバーへ送る用）</button>
+      <div id="shareBox" style="display:none; margin-top:10px;">
+        <label class="field-label">このURLをチャットやメールで送ってください</label>
+        <input type="text" id="shareUrlInput" readonly onclick="this.select();">
+        <button class="btn-secondary" id="copyShareBtn">コピーする</button>
+        <div class="hint" id="shareLenHint"></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <main>
+    <div id="map"></div>
+    <div class="map-empty" id="mapEmpty">
+      <div class="icon">🗺️</div>
+      <h3>まだ配送先が表示されていません</h3>
+      <p>左のパネルに出発地点と配送先を入力して「地図にピン表示する」を押してください。</p>
+    </div>
+    <div class="legend-strip" id="legendStrip"></div>
+  </main>
+
+</div>
+
+<!-- API key modal -->
+<div class="overlay" id="apiOverlay">
+  <div class="modal">
+    <h2>Google Maps APIキー</h2>
+    <p>
+      このアプリはブラウザ内で動作し、入力したAPIキーはあなたのブラウザ（localStorage）にのみ保存されます。<br>
+      Maps JavaScript API・Places API・Directions API を有効にしたキーを使用してください。
+      <a href="https://console.cloud.google.com/google/maps-apis" target="_blank" rel="noopener">Google Cloud Console ↗</a>
+    </p>
+    <input type="text" id="apiKeyInput" placeholder="AIza...">
+    <div class="modal-actions">
+      <button class="cancel" id="apiCancelBtn">キャンセル</button>
+      <button class="btn-primary" id="apiSaveBtn">保存して読み込む</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ===== Config =====
+  // ▼ 社内で共有するAPIキーをここに設定してからデプロイしてください。
+  //   設定すると、利用者はAPIキーの入力画面を見ずに使えます。
+  //   ※ Google Cloud Console でこのキーに「HTTPリファラー制限」をかけ、
+  //     デプロイ先のドメイン（例: https://your-org.github.io/*）でのみ
+  //     使えるように必ず制限してください。
+  var COMPANY_API_KEY = "AIzaSyBgNPXeWM3682Ff2js9Oy06ncCKKPx6klI";
+
+  var DRIVER_COLORS = ["#E63946","#457B9D","#2A9D8F","#F4A261","#8338EC","#FF006E","#3A86FF","#06D6A0","#FB8500","#6A4C93"];
+  var UNASSIGNED_COLOR = "#9AA3AF";
+  var MAX_STOPS = 50;
+  var MAX_STOPS_PER_DRIVER = 25; // Google Directions API の1リクエストあたりの上限（経由地23件＋出発地・到着地）
+
+  function toBase64Utf8(str){
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function fromBase64Utf8(b64){
+    return decodeURIComponent(escape(atob(b64)));
+  }
+
+  // ===== State =====
+  var state = {
+    map: null,
+    originLatLng: null,
+    originMarker: null,
+    stores: [],          // {name, lat, lng, marker, driver: null|index}
+    activeDriver: 0,
+    driverCount: 3,
+    directionsRenderers: [],
+    placesService: null,
+    geocoder: null,
+    autocomplete: null,
+    pinDropMode: false,
+    pinDropMarker: null,
+    lastRouteUrls: {}
+  };
+
+  var els = {
+    apiKeyBtn: document.getElementById('apiKeyBtn'),
+    apiOverlay: document.getElementById('apiOverlay'),
+    apiKeyInput: document.getElementById('apiKeyInput'),
+    apiSaveBtn: document.getElementById('apiSaveBtn'),
+    apiCancelBtn: document.getElementById('apiCancelBtn'),
+    originInput: document.getElementById('originInput'),
+    stopsInput: document.getElementById('stopsInput'),
+    driverCount: document.getElementById('driverCount'),
+    dMinus: document.getElementById('dMinus'),
+    dPlus: document.getElementById('dPlus'),
+    buildBtn: document.getElementById('buildBtn'),
+    autoSplitBtn: document.getElementById('autoSplitBtn'),
+    statusMsg: document.getElementById('statusMsg'),
+    assignPanel: document.getElementById('assignPanel'),
+    driverTabs: document.getElementById('driverTabs'),
+    activeDriverLabel: document.getElementById('activeDriverLabel'),
+    resultsPanel: document.getElementById('resultsPanel'),
+    driverBlocks: document.getElementById('driverBlocks'),
+    mapEmpty: document.getElementById('mapEmpty'),
+    legendStrip: document.getElementById('legendStrip'),
+    shareBanner: document.getElementById('shareBanner'),
+    shareLinkBtn: document.getElementById('shareLinkBtn'),
+    shareBox: document.getElementById('shareBox'),
+    shareUrlInput: document.getElementById('shareUrlInput'),
+    copyShareBtn: document.getElementById('copyShareBtn'),
+    shareLenHint: document.getElementById('shareLenHint'),
+    favChips: document.getElementById('favChips'),
+    favNewInput: document.getElementById('favNewInput'),
+    favLatInput: document.getElementById('favLatInput'),
+    favLngInput: document.getElementById('favLngInput'),
+    favPinBtn: document.getElementById('favPinBtn'),
+    favAddBtn: document.getElementById('favAddBtn'),
+    favAddFromListBtn: document.getElementById('favAddFromListBtn')
+  };
+
+  function showMsg(text, type){
+    els.statusMsg.className = 'msg ' + (type || '');
+    els.statusMsg.textContent = text;
+    els.statusMsg.style.display = 'block';
+  }
+  function clearMsg(){
+    els.statusMsg.style.display = 'none';
+  }
+
+  // ===== API key handling =====
+  function getApiKey(){ return localStorage.getItem('drb_gmaps_key') || ''; }
+  function setApiKey(k){ localStorage.setItem('drb_gmaps_key', k); }
+
+  els.apiKeyBtn.addEventListener('click', function(){
+    els.apiKeyInput.value = getApiKey();
+    els.apiOverlay.classList.add('show');
+  });
+  els.apiCancelBtn.addEventListener('click', function(){
+    els.apiOverlay.classList.remove('show');
+  });
+  els.apiSaveBtn.addEventListener('click', function(){
+    var key = els.apiKeyInput.value.trim();
+    if(!key){ return; }
+    setApiKey(key);
+    els.apiOverlay.classList.remove('show');
+    loadGoogleMaps(key);
+  });
+
+  function loadGoogleMaps(key){
+    var existing = document.getElementById('gmapsScript');
+    if(existing) existing.remove();
+    window.__onGMapsReady = onGMapsReady;
+    window.gm_authFailure = function(){
+      showMsg('APIキーの認証に失敗しました。Google Cloud Consoleで「Maps JavaScript API」「Places API」「Directions API」が有効か、お支払い（課金）設定が完了しているか、キーの制限（HTTPリファラー等）を確認してください。ローカルファイルで開いている場合はキーの制限を「なし」にするとテストしやすいです。', 'error');
+      els.buildBtn.disabled = false;
+    };
+    var s = document.createElement('script');
+    s.id = 'gmapsScript';
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places&callback=__onGMapsReady&loading=async';
+    s.onerror = function(){
+      showMsg('Google Maps スクリプトの読み込みに失敗しました。インターネット接続、または広告ブロッカー等の拡張機能をご確認ください。', 'error');
+    };
+    document.head.appendChild(s);
+  }
+
+  function onGMapsReady(){
+    state.map = new google.maps.Map(document.getElementById('map'), {
+      center: {lat: 35.5308, lng: 139.7029}, // 川崎付近をデフォルト表示
+      zoom: 12,
+      mapTypeControl:false,
+      streetViewControl:false,
+      fullscreenControl:false,
+      styles: [
+        {featureType:"poi", elementType:"labels", stylers:[{visibility:"off"}]},
+        {featureType:"transit", elementType:"labels", stylers:[{visibility:"off"}]}
+      ]
+    });
+    state.geocoder = new google.maps.Geocoder();
+    state.placesService = new google.maps.places.PlacesService(state.map);
+    state.autocomplete = new google.maps.places.Autocomplete(els.originInput, {fields:['geometry','name','formatted_address']});
+
+    state.map.addListener('click', function(e){
+      if(!state.pinDropMode) return;
+      var lat = e.latLng.lat();
+      var lng = e.latLng.lng();
+      els.favLatInput.value = lat.toFixed(6);
+      els.favLngInput.value = lng.toFixed(6);
+      if(state.pinDropMarker){ state.pinDropMarker.setMap(null); }
+      state.pinDropMarker = new google.maps.Marker({
+        position: e.latLng,
+        map: state.map,
+        icon: { path: google.maps.SymbolPath.CIRCLE, fillColor:'#12203A', fillOpacity:1, strokeColor:'#ffffff', strokeWeight:2, scale:9 },
+        label: { text:'📍', fontSize:'12px' },
+        zIndex: 998
+      });
+      state.pinDropMode = false;
+      updatePinDropUI();
+      showMsg('地図上の位置を取得しました。名前を入力して「よく使う配送先に登録」を押してください。', 'ok');
+      els.favNewInput.focus();
+    });
+
+    var shareData = getShareDataFromHash();
+    if(shareData){
+      restoreFromShareData(shareData);
+    }
+  }
+
+  // Auto-load: company-wide key takes priority, otherwise fall back to per-browser saved key
+  if(COMPANY_API_KEY){
+    els.apiKeyBtn.style.display = 'none';
+    loadGoogleMaps(COMPANY_API_KEY);
+  } else {
+    var savedKey = getApiKey();
+    if(savedKey){
+      loadGoogleMaps(savedKey);
+    } else {
+      els.apiOverlay.classList.add('show');
+    }
+  }
+
+  // ===== Driver count stepper =====
+  function clampDriverCount(){
+    var v = parseInt(els.driverCount.value, 10);
+    if(isNaN(v)) v = 1;
+    v = Math.max(1, Math.min(10, v));
+    els.driverCount.value = v;
+    state.driverCount = v;
+  }
+  els.driverCount.addEventListener('change', clampDriverCount);
+  els.dMinus.addEventListener('click', function(){
+    els.driverCount.value = Math.max(1, (parseInt(els.driverCount.value,10)||1) - 1);
+    clampDriverCount();
+  });
+  els.dPlus.addEventListener('click', function(){
+    els.driverCount.value = Math.min(10, (parseInt(els.driverCount.value,10)||1) + 1);
+    clampDriverCount();
+  });
+  clampDriverCount();
+
+  // ===== Favorite stops (persisted per-browser) =====
+  var FAV_KEY = 'drb_favorite_stops';
+  var COORD_LINE_RE = /^(.*?)\s*@\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+  function parseStopLine(line){
+    var m = line.match(COORD_LINE_RE);
+    if(m){
+      return { name: (m[1].trim() || line.trim()), lat: parseFloat(m[2]), lng: parseFloat(m[3]) };
+    }
+    return { name: line.trim(), lat: null, lng: null };
+  }
+
+  function stopLineFor(fav){
+    if(fav.lat!==null && fav.lat!==undefined && fav.lng!==null && fav.lng!==undefined){
+      return fav.name + ' @' + fav.lat + ',' + fav.lng;
+    }
+    return fav.name;
+  }
+
+  function loadFavorites(){
+    try{
+      var raw = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      return raw.map(function(item){
+        if(typeof item === 'string'){ return { name: item, lat: null, lng: null }; }
+        return { name: item.name, lat: (item.lat===undefined ? null : item.lat), lng: (item.lng===undefined ? null : item.lng) };
+      });
+    }catch(e){ return []; }
+  }
+  function saveFavorites(list){ localStorage.setItem(FAV_KEY, JSON.stringify(list)); }
+
+  function renderFavChips(){
+    var favs = loadFavorites();
+    els.favChips.innerHTML = '';
+    if(favs.length === 0){
+      var e = document.createElement('div');
+      e.className = 'fav-empty';
+      e.textContent = 'まだ登録がありません。よく行く納品先を登録しておくと、次回からワンクリックで配送先リストに追加できます。';
+      els.favChips.appendChild(e);
+      return;
+    }
+    favs.forEach(function(fav){
+      var chip = document.createElement('div');
+      chip.className = 'fav-chip';
+      var hasCoord = fav.lat!==null && fav.lat!==undefined;
+      var label = document.createElement('span');
+      label.textContent = (hasCoord ? '📍 ' : '') + fav.name;
+      label.title = hasCoord ? ('緯度経度を直接指定：' + fav.lat + ', ' + fav.lng) : '店舗名で検索';
+      label.addEventListener('click', function(){ insertStopLine(fav); });
+      var x = document.createElement('span');
+      x.className = 'x';
+      x.textContent = '×';
+      x.title = '登録解除';
+      x.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        saveFavorites(loadFavorites().filter(function(f){ return f.name !== fav.name; }));
+        renderFavChips();
+      });
+      chip.appendChild(label);
+      chip.appendChild(x);
+      els.favChips.appendChild(chip);
+    });
+  }
+
+  function insertStopLine(fav){
+    var line = stopLineFor(fav);
+    var current = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(current.indexOf(line) === -1){ current.push(line); }
+    els.stopsInput.value = current.join('\n');
+  }
+
+  function addFavorite(name, latStr, lngStr){
+    name = (name || '').trim();
+    if(!name){ showMsg('納品先の名前を入力してください。', 'error'); return; }
+    var latRaw = (latStr || '').trim();
+    var lngRaw = (lngStr || '').trim();
+    var lat = null, lng = null;
+    if(latRaw || lngRaw){
+      if(!latRaw || !lngRaw){ showMsg('緯度・経度は両方入力するか、両方空欄にしてください。', 'error'); return; }
+      lat = parseFloat(latRaw);
+      lng = parseFloat(lngRaw);
+      if(isNaN(lat) || isNaN(lng)){ showMsg('緯度・経度の形式が正しくありません（例：35.5311）。', 'error'); return; }
+    }
+    var favs = loadFavorites().filter(function(f){ return f.name !== name; }); // 同名は上書き
+    favs.push({ name: name, lat: lat, lng: lng });
+    saveFavorites(favs);
+    renderFavChips();
+    showMsg('「' + name + '」を、よく使う配送先に登録しました。', 'ok');
+  }
+
+  function updatePinDropUI(){
+    if(state.pinDropMode){
+      els.favPinBtn.textContent = '📍 地図をクリックしてください（もう一度押しでキャンセル）';
+      els.favPinBtn.classList.add('active');
+      if(state.map) state.map.setOptions({ draggableCursor: 'crosshair' });
+    } else {
+      els.favPinBtn.textContent = '📍 地図をクリックして緯度経度を取得';
+      els.favPinBtn.classList.remove('active');
+      if(state.map) state.map.setOptions({ draggableCursor: null });
+    }
+  }
+
+  els.favPinBtn.addEventListener('click', function(){
+    if(!state.map){ showMsg('先にAPIキーを設定し、地図を表示してください。', 'error'); return; }
+    state.pinDropMode = !state.pinDropMode;
+    updatePinDropUI();
+    if(state.pinDropMode){ showMsg('地図をクリックすると、その場所の緯度経度を取得します。', 'warn'); }
+  });
+
+  els.favAddBtn.addEventListener('click', function(){
+    addFavorite(els.favNewInput.value, els.favLatInput.value, els.favLngInput.value);
+    els.favNewInput.value = '';
+    els.favLatInput.value = '';
+    els.favLngInput.value = '';
+    if(state.pinDropMarker){ state.pinDropMarker.setMap(null); state.pinDropMarker = null; }
+  });
+  els.favNewInput.addEventListener('keydown', function(ev){
+    if(ev.key === 'Enter' && !ev.isComposing && ev.keyCode !== 229){
+      addFavorite(els.favNewInput.value, els.favLatInput.value, els.favLngInput.value);
+      els.favNewInput.value = ''; els.favLatInput.value=''; els.favLngInput.value='';
+    }
+  });
+  els.favAddFromListBtn.addEventListener('click', function(){
+    var lines = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(lines.length === 0){ showMsg('配送先リストが空です。先に入力してください。', 'warn'); return; }
+    var favs = loadFavorites();
+    var added = 0;
+    lines.forEach(function(line){
+      var parsed = parseStopLine(line);
+      if(!favs.some(function(f){ return f.name === parsed.name; })){
+        favs.push(parsed);
+        added++;
+      }
+    });
+    saveFavorites(favs);
+    renderFavChips();
+    showMsg(added + '件を「よく使う配送先」に登録しました。', 'ok');
+  });
+
+  renderFavChips();
+
+  // ===== Build (geocode + place pins) =====
+  els.buildBtn.addEventListener('click', function(){
+    if(!state.map){
+      showMsg('先にAPIキーを設定してください。', 'error');
+      els.apiOverlay.classList.add('show');
+      return;
+    }
+    var originText = els.originInput.value.trim();
+    var rawStops = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(!originText){ showMsg('出発地点を入力してください。', 'error'); return; }
+    if(rawStops.length === 0){ showMsg('配送先を1件以上入力してください。', 'error'); return; }
+    if(rawStops.length > MAX_STOPS){
+      rawStops = rawStops.slice(0, MAX_STOPS);
+      showMsg('配送先は最大' + MAX_STOPS + '件までです。先頭' + MAX_STOPS + '件のみ処理します。', 'warn');
+    }
+
+    resetBoard();
+    els.buildBtn.disabled = true;
+    els.buildBtn.textContent = '処理中...';
+    clearMsg();
+
+    geocodeText(originText, null).then(function(originResult){
+      if(!originResult){
+        showMsg('出発地点が見つかりませんでした。表記を変えて再度お試しください。', 'error');
+        els.buildBtn.disabled = false;
+        els.buildBtn.textContent = '📍 地図にピン表示する';
+        return;
+      }
+      state.originLatLng = originResult.location;
+      placeOriginMarker(originResult);
+
+      geocodeStopsSequentially(rawStops, originResult.location).then(function(res){
+        els.buildBtn.disabled = false;
+        els.buildBtn.textContent = '📍 地図にピン表示する';
+
+        if(res.found.length === 0){
+          showMsg('配送先が1件も見つかりませんでした。店舗名や住所の表記をご確認ください。', 'error');
+          return;
+        }
+        state.stores = res.found;
+        finalizeBoard();
+
+        if(res.notFound.length > 0){
+          showMsg('一部の店舗が見つかりませんでした（' + res.notFound.join('、') + '）。残りでピンを配置しました。', 'warn');
+        } else {
+          showMsg(res.found.length + '件の配送先を地図に表示しました。ドライバーに割り当ててください。', 'ok');
+        }
+      });
+    });
+  });
+
+  function finalizeBoard(){
+    renderMarkers();
+    fitBounds();
+    buildDriverTabs();
+    els.assignPanel.style.display = 'block';
+    els.resultsPanel.style.display = 'block';
+    els.autoSplitBtn.style.display = 'block';
+    els.mapEmpty.style.display = 'none';
+    renderDriverBlocks();
+    renderLegend();
+  }
+
+  function resetBoard(){
+    state.stores.forEach(function(s){ if(s.marker) s.marker.setMap(null); });
+    state.stores = [];
+    if(state.originMarker){ state.originMarker.setMap(null); state.originMarker = null; }
+    clearRoutes();
+    els.driverBlocks.innerHTML = '';
+    els.driverTabs.innerHTML = '';
+    els.legendStrip.classList.remove('show');
+  }
+
+  function geocodeText(text, biasLocation){
+    return new Promise(function(resolve){
+      var request = { query: text, fields: ['name','geometry','formatted_address'] };
+      if(biasLocation){
+        request.locationBias = new google.maps.Circle({center: biasLocation, radius: 30000});
+      }
+      state.placesService.findPlaceFromQuery(request, function(results, status){
+        if(status === google.maps.places.PlacesServiceStatus.OK && results && results[0]){
+          resolve({
+            name: results[0].name || text,
+            address: results[0].formatted_address || '',
+            location: results[0].geometry.location
+          });
+        } else {
+          // fallback to geocoder (better for plain addresses)
+          state.geocoder.geocode({address: text}, function(gr, gs){
+            if(gs === 'OK' && gr && gr[0]){
+              resolve({ name: text, address: gr[0].formatted_address, location: gr[0].geometry.location });
+            } else {
+              resolve(null);
+            }
+          });
+        }
+      });
+    });
+  }
+
+  function geocodeStopsSequentially(list, biasLocation){
+    var found = [], notFound = [];
+    var i = 0;
+    function next(){
+      if(i >= list.length){ return Promise.resolve({found:found, notFound:notFound}); }
+      var text = list[i]; i++;
+      var parsed = parseStopLine(text);
+      if(parsed.lat !== null && parsed.lng !== null){
+        // 緯度経度が直接指定されている場合は検索せずそのまま採用
+        found.push({ name: parsed.name, address: '(緯度経度を直接指定: ' + parsed.lat + ', ' + parsed.lng + ')', lat: parsed.lat, lng: parsed.lng, marker: null, driver: null, order: found.length });
+        return next();
+      }
+      return geocodeText(text, biasLocation).then(function(r){
+        if(r){
+          found.push({ name: r.name, address: r.address, lat: r.location.lat(), lng: r.location.lng(), marker: null, driver: null, order: found.length });
+        } else {
+          notFound.push(text);
+        }
+        return new Promise(function(res){ setTimeout(res, 60); }).then(next);
+      });
+    }
+    return next();
+  }
+
+  function placeOriginMarker(result){
+    state.originMarker = new google.maps.Marker({
+      position: result.location,
+      map: state.map,
+      title: '出発地点: ' + (result.name || ''),
+      icon: {
+        path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+        scale: 0,
+      },
+      label: { text: '🏁', fontSize: '20px' },
+      zIndex: 999
+    });
+  }
+
+  function markerIcon(color, label){
+    return {
+      path: google.maps.SymbolPath.CIRCLE,
+      fillColor: color,
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 2,
+      scale: 13
+    };
+  }
+
+  function renderMarkers(){
+    state.stores.forEach(function(store, idx){
+      var color = store.driver === null ? UNASSIGNED_COLOR : DRIVER_COLORS[store.driver % DRIVER_COLORS.length];
+      var marker = new google.maps.Marker({
+        position: {lat: store.lat, lng: store.lng},
+        map: state.map,
+        icon: markerIcon(color),
+        label: { text: String(idx+1), color:'#ffffff', fontSize:'11px', fontWeight:'700' },
+        title: store.name
+      });
+      marker.addListener('click', function(){ toggleAssign(idx); });
+      store.marker = marker;
+    });
+  }
+
+  function fitBounds(){
+    var bounds = new google.maps.LatLngBounds();
+    if(state.originLatLng) bounds.extend(state.originLatLng);
+    state.stores.forEach(function(s){ bounds.extend({lat:s.lat, lng:s.lng}); });
+    state.map.fitBounds(bounds, 60);
+  }
+
+  // ===== Driver tabs / assignment =====
+  function buildDriverTabs(){
+    els.driverTabs.innerHTML = '';
+    for(var i=0; i<state.driverCount; i++){
+      (function(i){
+        var tag = document.createElement('div');
+        tag.className = 'driver-tag' + (i===state.activeDriver ? ' active' : '');
+        tag.style.background = DRIVER_COLORS[i % DRIVER_COLORS.length];
+        tag.innerHTML = 'D' + (i+1) + ' <span class="count" id="tabCount'+i+'">0</span>';
+        tag.addEventListener('click', function(){
+          state.activeDriver = i;
+          document.querySelectorAll('.driver-tag').forEach(function(t){t.classList.remove('active');});
+          tag.classList.add('active');
+          els.activeDriverLabel.textContent = 'ドライバー ' + (i+1);
+        });
+        els.driverTabs.appendChild(tag);
+      })(i);
+    }
+    els.activeDriverLabel.textContent = 'ドライバー ' + (state.activeDriver+1);
+    updateTabCounts();
+  }
+
+  function updateTabCounts(){
+    for(var i=0; i<state.driverCount; i++){
+      var el = document.getElementById('tabCount' + i);
+      if(el) el.textContent = state.stores.filter(function(s){return s.driver===i;}).length;
+    }
+  }
+
+  function toggleAssign(idx){
+    var store = state.stores[idx];
+    if(store.driver === state.activeDriver){
+      store.driver = null;
+    } else {
+      store.driver = state.activeDriver;
+    }
+    var color = store.driver === null ? UNASSIGNED_COLOR : DRIVER_COLORS[store.driver % DRIVER_COLORS.length];
+    store.marker.setIcon(markerIcon(color));
+    state.lastRouteUrls = {};
+    updateTabCounts();
+    renderDriverBlocks();
+  }
+
+  function unassign(idx){
+    var store = state.stores[idx];
+    store.driver = null;
+    store.marker.setIcon(markerIcon(UNASSIGNED_COLOR));
+    state.lastRouteUrls = {};
+    updateTabCounts();
+    renderDriverBlocks();
+  }
+
+  // ===== Auto split (nearest-neighbor-ish by angle/distance) =====
+  els.autoSplitBtn.addEventListener('click', function(){
+    if(!state.originLatLng || state.stores.length===0) return;
+    var origin = state.originLatLng;
+    // sort by bearing from origin so nearby stops cluster together, then chunk by driver
+    var withBearing = state.stores.map(function(s, idx){
+      var dy = s.lat - origin.lat();
+      var dx = (s.lng - origin.lng()) * Math.cos(origin.lat()*Math.PI/180);
+      var bearing = Math.atan2(dx, dy);
+      return {idx: idx, bearing: bearing};
+    });
+    withBearing.sort(function(a,b){ return a.bearing - b.bearing; });
+    var n = state.driverCount;
+    // even chunking along sorted bearing order (contiguous arcs per driver) gives geographically sensible groups
+    var perDriver = Math.ceil(withBearing.length / n);
+    withBearing.forEach(function(item, order){
+      var driverIdx = Math.min(n-1, Math.floor(order / perDriver));
+      var store = state.stores[item.idx];
+      store.driver = driverIdx;
+      store.marker.setIcon(markerIcon(DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]));
+    });
+    updateTabCounts();
+    state.lastRouteUrls = {};
+    renderDriverBlocks();
+    showMsg('距離（方角）順に自動で割り振りました。ピンをクリックすると手動で調整できます。', 'ok');
+  });
+
+  // ===== Manual & automatic reordering =====
+  function haversineKm(lat1, lng1, lat2, lng2){
+    var R = 6371;
+    var dLat = (lat2-lat1) * Math.PI/180;
+    var dLng = (lng2-lng1) * Math.PI/180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function applyOrder(orderedStops){
+    orderedStops.forEach(function(item, i){ item.s.order = i; });
+  }
+
+  function moveStop(driverIdx, pos, dir){
+    var list = state.stores
+      .map(function(s, idx){ return {s:s, idx:idx}; })
+      .filter(function(item){ return item.s.driver === driverIdx; })
+      .sort(function(a,b){ return (a.s.order||0) - (b.s.order||0); });
+    var newPos = pos + dir;
+    if(newPos < 0 || newPos >= list.length) return;
+    var tmp = list[pos].s.order;
+    list[pos].s.order = list[newPos].s.order;
+    list[newPos].s.order = tmp;
+    delete state.lastRouteUrls[driverIdx];
+    renderDriverBlocks();
+  }
+
+  // ===== Results panel =====
+  function renderDriverBlocks(){
+    els.driverBlocks.innerHTML = '';
+    for(var i=0; i<state.driverCount; i++){
+      (function(i){
+        var stops = [];
+        state.stores.forEach(function(s, idx){ if(s.driver===i) stops.push({s:s, idx:idx}); });
+        stops.sort(function(a,b){ return (a.s.order||0) - (b.s.order||0); });
+
+        var block = document.createElement('div');
+        block.className = 'driver-block';
+
+        var head = document.createElement('div');
+        head.className = 'driver-block-head';
+        head.style.background = DRIVER_COLORS[i % DRIVER_COLORS.length];
+        var overLimit = stops.length > MAX_STOPS_PER_DRIVER;
+        head.innerHTML = '<span class="name">DRIVER ' + (i+1) + '</span><span class="num">' + stops.length + ' 件' + (overLimit ? ' ⚠上限超過' : '') + '</span>';
+        block.appendChild(head);
+
+        var body = document.createElement('div');
+        body.className = 'driver-block-body';
+        if(stops.length === 0){
+          var empty = document.createElement('div');
+          empty.className = 'empty-note';
+          empty.textContent = '未割当（地図でピンをクリックして割り当ててください）';
+          body.appendChild(empty);
+        } else {
+          stops.forEach(function(item, pos){
+            var row = document.createElement('div');
+            row.className = 'stop-row';
+
+            var ordGroup = document.createElement('div');
+            ordGroup.className = 'ord-group';
+            var upBtn = document.createElement('button');
+            upBtn.className = 'ord-btn';
+            upBtn.textContent = '▲';
+            upBtn.title = '順番を上げる';
+            upBtn.disabled = (pos === 0);
+            upBtn.addEventListener('click', function(){ moveStop(i, pos, -1); });
+            var downBtn = document.createElement('button');
+            downBtn.className = 'ord-btn';
+            downBtn.textContent = '▼';
+            downBtn.title = '順番を下げる';
+            downBtn.disabled = (pos === stops.length-1);
+            downBtn.addEventListener('click', function(){ moveStop(i, pos, 1); });
+            ordGroup.appendChild(upBtn);
+            ordGroup.appendChild(downBtn);
+
+            var idxBadge = document.createElement('span');
+            idxBadge.className = 'idx';
+            idxBadge.textContent = pos+1;
+            var nm = document.createElement('span');
+            nm.className = 'nm';
+            nm.textContent = item.s.name;
+            var rm = document.createElement('button');
+            rm.className = 'rm';
+            rm.title = '割当解除';
+            rm.textContent = '×';
+            rm.addEventListener('click', function(){ unassign(item.idx); });
+            row.appendChild(ordGroup);
+            row.appendChild(idxBadge);
+            row.appendChild(nm);
+            row.appendChild(rm);
+            body.appendChild(row);
+          });
+        }
+        block.appendChild(body);
+
+        var optimizeBtn = document.createElement('button');
+        optimizeBtn.className = 'open-route-btn';
+        optimizeBtn.textContent = '🔀 最短ルートに並び替え';
+        optimizeBtn.disabled = stops.length < 2;
+        block.appendChild(optimizeBtn);
+
+        var openBtn = document.createElement('button');
+        openBtn.className = 'open-route-btn';
+        openBtn.textContent = '🗺  Googleマップのルートリンクを作る';
+        openBtn.disabled = stops.length === 0;
+        block.appendChild(openBtn);
+
+        var linkBox = document.createElement('div');
+        linkBox.style.cssText = 'display:none; padding:8px 12px 10px; border-top:1px dashed var(--line);';
+        var linkInput = document.createElement('input');
+        linkInput.type = 'text';
+        linkInput.readOnly = true;
+        linkInput.style.cssText = 'width:100%; font-size:11px; margin-bottom:6px;';
+        linkInput.addEventListener('click', function(){ linkInput.select(); });
+        var linkRow = document.createElement('div');
+        linkRow.style.cssText = 'display:flex; gap:6px;';
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-secondary';
+        copyBtn.style.margin = '0';
+        copyBtn.textContent = '📋 コピー';
+        var openNowBtn = document.createElement('button');
+        openNowBtn.className = 'btn-secondary';
+        openNowBtn.style.margin = '0';
+        openNowBtn.textContent = '↗ 開く';
+        copyBtn.addEventListener('click', function(){
+          linkInput.select();
+          function done(){ showMsg('ドライバー' + (i+1) + 'のルートリンクをコピーしました。LINEやメールに貼り付けて送れます。', 'ok'); }
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(linkInput.value).then(done).catch(function(){ document.execCommand('copy'); done(); });
+          } else {
+            document.execCommand('copy'); done();
+          }
+        });
+        openNowBtn.addEventListener('click', function(){ window.open(linkInput.value, '_blank'); });
+        linkRow.appendChild(copyBtn);
+        linkRow.appendChild(openNowBtn);
+        linkBox.appendChild(linkInput);
+        linkBox.appendChild(linkRow);
+        block.appendChild(linkBox);
+
+        // restore cached link (survives re-renders triggered by manual reorder etc.)
+        if(state.lastRouteUrls[i]){
+          linkInput.value = state.lastRouteUrls[i];
+          linkBox.style.display = 'block';
+        }
+
+        optimizeBtn.addEventListener('click', function(){
+          optimizeBtn.disabled = true;
+          optimizeBtn.textContent = '計算中...';
+          computeOptimizedRoute(i, stops, function(result){
+            if(result){
+              applyOrder(result.orderedStops);
+              state.lastRouteUrls[i] = result.url;
+              renderDriverBlocks();
+              showMsg('ドライバー' + (i+1) + 'の配送順を最短ルートに並び替えました。', 'ok');
+            } else {
+              optimizeBtn.disabled = false;
+              optimizeBtn.textContent = '🔀 最短ルートに並び替え';
+            }
+          });
+        });
+
+        openBtn.addEventListener('click', function(){
+          openBtn.disabled = true;
+          openBtn.textContent = 'ルート計算中...';
+          computeOptimizedRoute(i, stops, function(result){
+            openBtn.disabled = false;
+            openBtn.textContent = '🗺  Googleマップのルートリンクを作る';
+            if(result){
+              applyOrder(result.orderedStops);
+              state.lastRouteUrls[i] = result.url;
+              renderDriverBlocks();
+            }
+          });
+        });
+
+        els.driverBlocks.appendChild(block);
+      })(i);
+    }
+  }
+
+  // ===== Route optimization + open in Google Maps =====
+  function clearRoutes(){
+    state.directionsRenderers.forEach(function(r){ r.setMap(null); });
+    state.directionsRenderers = [];
+  }
+
+  function computeOptimizedRoute(driverIdx, stops, callback){
+    if(!state.originLatLng || stops.length===0){ if(callback) callback(null); return; }
+
+    if(stops.length > MAX_STOPS_PER_DRIVER){
+      showMsg('ドライバー' + (driverIdx+1) + 'の割当が' + stops.length + '件あり、Googleのルート計算の上限（1ドライバーあたり' + MAX_STOPS_PER_DRIVER + '件）を超えています。他のドライバーに一部を割り振り直してください。', 'error');
+      if(callback) callback(null);
+      return;
+    }
+    if(stops.length === 1){
+      var only = stops[0];
+      var url1 = 'https://www.google.com/maps/dir/?api=1'
+        + '&origin=' + encodeURIComponent(state.originLatLng.lat() + ',' + state.originLatLng.lng())
+        + '&destination=' + encodeURIComponent(only.s.lat + ',' + only.s.lng)
+        + '&travelmode=driving';
+      if(callback) callback({ url: url1, orderedStops: [only] });
+      return;
+    }
+
+    var origin = state.originLatLng;
+
+    // 出発地点から最も遠い配送先を「目的地」に選ぶ（＝往路の折り返し地点にしない）
+    var farthestPos = 0, maxDist = -1;
+    stops.forEach(function(item, pos){
+      var d = haversineKm(origin.lat(), origin.lng(), item.s.lat, item.s.lng);
+      if(d > maxDist){ maxDist = d; farthestPos = pos; }
+    });
+    var destinationItem = stops[farthestPos];
+    var others = stops.filter(function(item, pos){ return pos !== farthestPos; });
+
+    var destination = {lat: destinationItem.s.lat, lng: destinationItem.s.lng};
+    var waypoints = others.map(function(item){
+      return { location: {lat: item.s.lat, lng: item.s.lng}, stopover: true };
+    });
+
+    var directionsService = new google.maps.DirectionsService();
+    directionsService.route({
+      origin: origin,
+      destination: destination,
+      waypoints: waypoints,
+      optimizeWaypoints: true,
+      travelMode: google.maps.TravelMode.DRIVING
+    }, function(result, status){
+      if(status !== 'OK'){
+        showMsg('ドライバー' + (driverIdx+1) + 'のルート計算に失敗しました（' + status + '）。', 'error');
+        if(callback) callback(null);
+        return;
+      }
+      // draw on map
+      var renderer = new google.maps.DirectionsRenderer({
+        map: state.map,
+        directions: result,
+        suppressMarkers: true,
+        polylineOptions: { strokeColor: DRIVER_COLORS[driverIdx % DRIVER_COLORS.length], strokeWeight: 5, strokeOpacity: .85 }
+      });
+      state.directionsRenderers.push(renderer);
+
+      // build ordered stop list from optimized waypoint order (indices refer to "others", not the full stops list)
+      var order = result.routes[0].waypoint_order;
+      var orderedStops = order.map(function(i){ return others[i]; });
+      orderedStops.push(destinationItem); // 一番遠い場所を最後に配置
+
+      var originStr = origin.lat() + ',' + origin.lng();
+      var destStr = destination.lat + ',' + destination.lng;
+      var wpStr = orderedStops.slice(0, -1).map(function(item){ return item.s.lat + ',' + item.s.lng; }).join('|');
+
+      var url = 'https://www.google.com/maps/dir/?api=1'
+        + '&origin=' + encodeURIComponent(originStr)
+        + '&destination=' + encodeURIComponent(destStr)
+        + (wpStr ? '&waypoints=' + encodeURIComponent(wpStr) : '')
+        + '&travelmode=driving';
+
+      if(callback) callback({ url: url, orderedStops: orderedStops });
+    });
+  }
+
+  function renderLegend(){
+    var html = '<div style="font-weight:700;margin-bottom:4px;">凡例</div>';
+    html += '<div class="row"><span class="sw" style="background:'+UNASSIGNED_COLOR+'"></span>未割当</div>';
+    for(var i=0;i<state.driverCount;i++){
+      html += '<div class="row"><span class="sw" style="background:'+DRIVER_COLORS[i%DRIVER_COLORS.length]+'"></span>ドライバー'+(i+1)+'</div>';
+    }
+    els.legendStrip.innerHTML = html;
+    els.legendStrip.classList.add('show');
+  }
+
+  // ===== Share link: create =====
+  function serializeState(){
+    return {
+      ot: els.originInput.value.trim(),
+      o: { lat: state.originLatLng.lat(), lng: state.originLatLng.lng() },
+      dc: state.driverCount,
+      st: state.stores.map(function(s){
+        return { n: s.name, a: s.address, la: s.lat, ln: s.lng, d: (s.driver===null||s.driver===undefined) ? null : s.driver, o: (s.order===undefined?null:s.order) };
+      })
+    };
+  }
+
+  els.shareLinkBtn.addEventListener('click', function(){
+    if(!state.originLatLng || state.stores.length===0){
+      showMsg('共有リンクを作る前に、配送先を地図に表示してください。', 'error');
+      return;
+    }
+    var data = serializeState();
+    var b64 = toBase64Utf8(JSON.stringify(data));
+    var url = location.origin + location.pathname + '#data=' + encodeURIComponent(b64);
+
+    els.shareUrlInput.value = url;
+    els.shareBox.style.display = 'block';
+
+    if(url.length > 6000){
+      els.shareLenHint.textContent = '⚠ URLがかなり長くなっています（' + url.length + '文字）。送信先のアプリによっては開けない場合があります。件数を絞るか、ドライバーごとの「Googleマップでルートを開く」リンクを個別に送る方法もご検討ください。';
+    } else {
+      els.shareLenHint.textContent = 'このURLには割当データが含まれています（サーバー保存は不要です）。開けば同じ地図と割当がそのまま表示されます。';
+    }
+
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){
+        showMsg('共有リンクをコピーしました。', 'ok');
+      }).catch(function(){ /* ignore, user can copy manually */ });
+    }
+  });
+
+  els.copyShareBtn.addEventListener('click', function(){
+    els.shareUrlInput.select();
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(els.shareUrlInput.value).then(function(){
+        showMsg('共有リンクをコピーしました。', 'ok');
+      });
+    } else {
+      document.execCommand('copy');
+      showMsg('共有リンクをコピーしました。', 'ok');
+    }
+  });
+
+  // ===== Share link: restore =====
+  function getShareDataFromHash(){
+    var h = location.hash;
+    if(h.indexOf('#data=') !== 0) return null;
+    try{
+      var b64 = decodeURIComponent(h.slice(6));
+      return JSON.parse(fromBase64Utf8(b64));
+    }catch(e){
+      return null;
+    }
+  }
+
+  function restoreFromShareData(data){
+    resetBoard();
+
+    els.originInput.value = data.ot || '';
+    els.stopsInput.value = (data.st || []).map(function(s){ return s.n; }).join('\n');
+    els.driverCount.value = data.dc || 1;
+    clampDriverCount();
+
+    state.originLatLng = new google.maps.LatLng(data.o.lat, data.o.lng);
+    placeOriginMarker({ location: state.originLatLng, name: data.ot });
+
+    state.stores = (data.st || []).map(function(s, idx){
+      return { name: s.n, address: s.a, lat: s.la, lng: s.ln, marker: null, driver: (s.d===null||s.d===undefined) ? null : s.d, order: (s.o===null||s.o===undefined) ? idx : s.o };
+    });
+
+    finalizeBoard();
+    els.shareBanner.style.display = 'block';
+    showMsg('共有リンクから割当データを読み込みました。', 'ok');
+  }
+
+})();
+
+</script>
+</body>
+</html>
