@@ -1221,6 +1221,26 @@
     renderDriverBlocks();
   }
 
+  // ===== LINE message builder =====
+  function buildLineMessage(stops){
+    var lines = [];
+    lines.push('お世話になっております。');
+    lines.push('下記案件いかがでしょうか？');
+    lines.push('');
+    lines.push('荷主名：');
+    lines.push('');
+    lines.push('集荷時間：');
+    lines.push('');
+    lines.push('積地：');
+    lines.push(els.originInput.value.trim() || '（出発地点未入力）');
+    lines.push('');
+    lines.push('納品先：');
+    stops.forEach(function(item, pos){
+      lines.push((pos+1) + '. ' + item.s.name);
+    });
+    return lines.join('\n');
+  }
+
   // ===== Results panel =====
   function renderDriverBlocks(){
     els.driverBlocks.innerHTML = '';
@@ -1339,6 +1359,46 @@
           linkInput.value = state.lastRouteUrls[i];
           linkBox.style.display = 'block';
         }
+
+        var lineBtn = document.createElement('button');
+        lineBtn.className = 'open-route-btn';
+        lineBtn.textContent = '📋 LINE案内文を作成';
+        lineBtn.disabled = stops.length === 0;
+        block.appendChild(lineBtn);
+
+        var lineBox = document.createElement('div');
+        lineBox.style.cssText = 'display:none; padding:8px 12px 10px; border-top:1px dashed var(--line);';
+        var lineTextarea = document.createElement('textarea');
+        lineTextarea.readOnly = true;
+        lineTextarea.style.cssText = 'width:100%; font-size:12px; line-height:1.6; min-height:180px; margin-bottom:6px; font-family:inherit;';
+        lineTextarea.addEventListener('click', function(){ lineTextarea.select(); });
+        var lineCopyBtn = document.createElement('button');
+        lineCopyBtn.className = 'btn-secondary';
+        lineCopyBtn.style.margin = '0';
+        lineCopyBtn.textContent = '📋 案内文をコピー';
+        lineCopyBtn.addEventListener('click', function(){
+          lineTextarea.select();
+          function done(){ showMsg('ドライバー' + (i+1) + 'の案内文をコピーしました。荷主名・集荷時間を書き足してLINEに貼り付けてください。', 'ok'); }
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(lineTextarea.value).then(done).catch(function(){ document.execCommand('copy'); done(); });
+          } else {
+            document.execCommand('copy'); done();
+          }
+        });
+        lineBox.appendChild(lineTextarea);
+        lineBox.appendChild(lineCopyBtn);
+        block.appendChild(lineBox);
+
+        lineBtn.addEventListener('click', function(){
+          lineTextarea.value = buildLineMessage(stops);
+          lineBox.style.display = 'block';
+          lineTextarea.select();
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(lineTextarea.value).then(function(){
+              showMsg('ドライバー' + (i+1) + 'の案内文をコピーしました。荷主名・集荷時間を書き足してLINEに貼り付けてください。', 'ok');
+            }).catch(function(){});
+          }
+        });
 
         optimizeBtn.addEventListener('click', function(){
           optimizeBtn.disabled = true;
