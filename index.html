@@ -520,6 +520,15 @@
       <div class="hint">正式な店舗名に近いほど検索精度が上がります。見つからない場合は住所で入力してください。<br>※ Googleのルート計算は1ドライバーあたり最大25件までです。<br>※「名前 @緯度,経度」の形式で入力すると、検索せず直接その座標にピンを立てられます（例：倉庫裏口 @35.5311,139.6829）。よく使う配送先から登録・呼び出すと自動でこの形式になります。</div>
 
       <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
+        <label class="field-label">📷 写真から配送先を読み取る（OCR）</label>
+        <div class="hint">コース表などの写真を選ぶと、店舗名と住所を自動で読み取ってリストに追加します。手書きの丸数字・コース番号は無視されます。<b>読み取り後は必ず内容を確認してください（誤読の可能性があります）。</b></div>
+        <input type="file" id="ocrFileInput" accept="image/*" style="display:none;">
+        <button class="btn-secondary" id="ocrPickBtn" style="margin-top:8px;">📷 写真を選んで読み取る</button>
+        <button class="btn-secondary" id="ocrKeyBtn" style="margin-top:6px; font-size:11px; color:var(--muted);">🔑 読み取り用APIキー設定</button>
+        <div class="msg" id="ocrMsg"></div>
+      </div>
+
+      <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
         <label class="field-label">☆ よく使う配送先（クリックでリストに追加）</label>
         <div class="fav-chips" id="favChips"></div>
 
@@ -607,6 +616,23 @@
   </div>
 </div>
 
+<!-- OCR (Anthropic) API key modal -->
+<div class="overlay" id="ocrApiOverlay">
+  <div class="modal">
+    <h2>写真読み取り用 APIキー（Anthropic）</h2>
+    <p>
+      配送先リストの写真をテキスト化するために、Anthropic（Claude）のAPIキーを使用します。入力したキーはあなたのブラウザ（localStorage）にのみ保存され、読み取り時にAnthropicのサーバーへ直接送信されます。<br>
+      <b>⚠ このキーは他人と共有しないでください。第三者に知られると、あなたの名義で利用料金が発生するおそれがあります。</b><br>
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console でキーを発行 ↗</a>
+    </p>
+    <input type="text" id="ocrApiKeyInput" placeholder="sk-ant-...">
+    <div class="modal-actions">
+      <button class="cancel" id="ocrApiCancelBtn">キャンセル</button>
+      <button class="btn-primary" id="ocrApiSaveBtn">保存する</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   "use strict";
@@ -681,7 +707,15 @@
     favLngInput: document.getElementById('favLngInput'),
     favPinBtn: document.getElementById('favPinBtn'),
     favAddBtn: document.getElementById('favAddBtn'),
-    favAddFromListBtn: document.getElementById('favAddFromListBtn')
+    favAddFromListBtn: document.getElementById('favAddFromListBtn'),
+    ocrFileInput: document.getElementById('ocrFileInput'),
+    ocrPickBtn: document.getElementById('ocrPickBtn'),
+    ocrKeyBtn: document.getElementById('ocrKeyBtn'),
+    ocrMsg: document.getElementById('ocrMsg'),
+    ocrApiOverlay: document.getElementById('ocrApiOverlay'),
+    ocrApiKeyInput: document.getElementById('ocrApiKeyInput'),
+    ocrApiSaveBtn: document.getElementById('ocrApiSaveBtn'),
+    ocrApiCancelBtn: document.getElementById('ocrApiCancelBtn')
   };
 
   function showMsg(text, type){
@@ -942,6 +976,158 @@
   });
 
   renderFavChips();
+
+  // ===== OCR: photo -> stops list (via Anthropic Claude API, vision) =====
+  var OCR_KEY = 'drb_anthropic_key';
+  var OCR_MODEL = 'claude-sonnet-5';
+
+  function getOcrKey(){ return localStorage.getItem(OCR_KEY) || ''; }
+  function setOcrKey(k){ localStorage.setItem(OCR_KEY, k); }
+
+  function showOcrMsg(text, type){
+    els.ocrMsg.className = 'msg ' + (type || '');
+    els.ocrMsg.textContent = text;
+    els.ocrMsg.style.display = 'block';
+  }
+  function clearOcrMsg(){ els.ocrMsg.style.display = 'none'; }
+
+  els.ocrKeyBtn.addEventListener('click', function(){
+    els.ocrApiKeyInput.value = getOcrKey();
+    els.ocrApiOverlay.classList.add('show');
+  });
+  els.ocrApiCancelBtn.addEventListener('click', function(){
+    els.ocrApiOverlay.classList.remove('show');
+  });
+  els.ocrApiSaveBtn.addEventListener('click', function(){
+    var key = els.ocrApiKeyInput.value.trim();
+    if(!key){ return; }
+    setOcrKey(key);
+    els.ocrApiOverlay.classList.remove('show');
+    showOcrMsg('APIキーを保存しました。もう一度「写真を選んで読み取る」を押してください。', 'ok');
+  });
+
+  els.ocrPickBtn.addEventListener('click', function(){
+    if(!getOcrKey()){
+      els.ocrApiKeyInput.value = '';
+      els.ocrApiOverlay.classList.add('show');
+      return;
+    }
+    els.ocrFileInput.click();
+  });
+
+  els.ocrFileInput.addEventListener('change', function(){
+    var file = els.ocrFileInput.files && els.ocrFileInput.files[0];
+    els.ocrFileInput.value = '';
+    if(!file) return;
+    runOcr(file);
+  });
+
+  function fileToBase64(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var result = reader.result; // data:<mime>;base64,<data>
+        var comma = result.indexOf(',');
+        resolve(result.slice(comma + 1));
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  var OCR_PROMPT = [
+    'これは配送コース表（配送先一覧）の写真です。表の中から、配送先1件ごとに「店舗名（または宛先名）」と「住所」を読み取ってください。',
+    '- 手書きの丸数字・コース番号・並び順のメモは無視してください（読み取り対象は店舗名と住所のみ）。',
+    '- 表とは別に手書きで追記された配送先（店名や住所のメモ書き）があれば、それも読み取って含めてください。',
+    '- 出力は他の説明文を一切付けず、次のJSON配列のみを返してください：',
+    '[{"name":"店舗名","address":"住所"}, ...]',
+    '住所は都道府県から書き、判読できない文字は無理に埋めず、読み取れる範囲で正確に書き写してください。'
+  ].join('\n');
+
+  function parseOcrResponse(text){
+    try{
+      var cleaned = (text || '').trim();
+      var fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if(fence) cleaned = fence[1].trim();
+      var start = cleaned.indexOf('[');
+      var end = cleaned.lastIndexOf(']');
+      if(start === -1 || end === -1) return null;
+      var arr = JSON.parse(cleaned.slice(start, end + 1));
+      if(!Array.isArray(arr)) return null;
+      return arr;
+    }catch(e){ return null; }
+  }
+
+  function runOcr(file){
+    var key = getOcrKey();
+    if(!key){ els.ocrApiOverlay.classList.add('show'); return; }
+
+    els.ocrPickBtn.disabled = true;
+    els.ocrPickBtn.textContent = '読み取り中...';
+    clearOcrMsg();
+
+    fileToBase64(file).then(function(b64){
+      return fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: OCR_MODEL,
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: (file.type || 'image/jpeg'), data: b64 } },
+              { type: 'text', text: OCR_PROMPT }
+            ]
+          }]
+        })
+      }).then(function(res){
+        return res.json().then(function(data){ return { ok: res.ok, data: data }; });
+      });
+    }).then(function(result){
+      els.ocrPickBtn.disabled = false;
+      els.ocrPickBtn.textContent = '📷 写真を選んで読み取る';
+
+      if(!result.ok){
+        var err = result.data && result.data.error;
+        if(err && err.type === 'authentication_error'){
+          showOcrMsg('APIキーが正しくありません。「🔑 読み取り用APIキー設定」から再設定してください。', 'error');
+        } else {
+          showOcrMsg('読み取りに失敗しました：' + (err && err.message ? err.message : '不明なエラー'), 'error');
+        }
+        return;
+      }
+
+      var text = (result.data.content && result.data.content[0] && result.data.content[0].text) || '';
+      var items = parseOcrResponse(text);
+      if(!items || items.length === 0){
+        showOcrMsg('配送先を読み取れませんでした。写真の向き・明るさを変えて再度お試しください。', 'error');
+        return;
+      }
+
+      var lines = items.map(function(it){
+        var name = ((it && it.name) || '').trim();
+        var addr = ((it && it.address) || '').trim();
+        if(name && addr) return name + ' ' + addr;
+        return name || addr;
+      }).filter(Boolean);
+
+      var current = els.stopsInput.value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+      lines.forEach(function(line){ if(current.indexOf(line) === -1){ current.push(line); } });
+      els.stopsInput.value = current.join('\n');
+
+      showOcrMsg(lines.length + '件の配送先を読み取り、リストに追加しました。内容を必ず確認してから「地図にピン表示する」を押してください。', 'ok');
+    }).catch(function(){
+      els.ocrPickBtn.disabled = false;
+      els.ocrPickBtn.textContent = '📷 写真を選んで読み取る';
+      showOcrMsg('通信エラーが発生しました。インターネット接続をご確認のうえ再度お試しください。', 'error');
+    });
+  }
 
   // ===== Build (geocode + place pins) =====
   els.buildBtn.addEventListener('click', function(){
