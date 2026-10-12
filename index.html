@@ -1036,7 +1036,7 @@
   }
 
   var OCR_PROMPT = [
-    'これは配送コース表（配送先一覧）の写真です。表の中から、配送先1件ごとに「店舗名（または宛先名）」と「住所」を読み取ってください。',
+    'これは配送先の一覧表（コース表・得意先一覧など）の写真または画像です。表の中から、配送先1件ごとに「店舗名（または宛先名）」と「住所」を読み取ってください。',
     '- 手書きの丸数字・コース番号・並び順のメモは無視してください（読み取り対象は店舗名と住所のみ）。',
     '- 表とは別に手書きで追記された配送先（店名や住所のメモ書き）があれば、それも読み取って含めてください。',
     '- 出力は他の説明文を一切付けず、次のJSON配列のみを返してください：',
@@ -1077,7 +1077,7 @@
         },
         body: JSON.stringify({
           model: OCR_MODEL,
-          max_tokens: 4000,
+          max_tokens: 8000,
           messages: [{
             role: 'user',
             content: [
@@ -1103,10 +1103,14 @@
         return;
       }
 
-      var text = (result.data.content && result.data.content[0] && result.data.content[0].text) || '';
+      var blocks = Array.isArray(result.data.content) ? result.data.content : [];
+      var text = blocks.filter(function(b){ return b && b.type === 'text'; })
+                       .map(function(b){ return b.text || ''; }).join('\n');
       var items = parseOcrResponse(text);
       if(!items || items.length === 0){
-        showOcrMsg('配送先を読み取れませんでした。写真の向き・明るさを変えて再度お試しください。', 'error');
+        var why = '終了理由: ' + (result.data.stop_reason || '不明') +
+                  ' / 応答の先頭: ' + (text ? text.slice(0, 80).replace(/\s+/g, ' ') : '(テキストなし)');
+        showOcrMsg('配送先を読み取れませんでした。写真の向き・明るさを変えて再度お試しください。（' + why + '）', 'error');
         return;
       }
 
